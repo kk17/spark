@@ -17,20 +17,23 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.UUID
+
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
-import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 
 /**
  * Spark's own GetSchemasOperation
  *
  * @param sqlContext SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable.
+ * @param catalogName catalog name. NULL if not applicable.
  * @param schemaName database name, null or a concrete database name
  */
 private[hive] class SparkGetSchemasOperation(
@@ -38,9 +41,27 @@ private[hive] class SparkGetSchemasOperation(
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) {
+  extends GetSchemasOperation(parentSession, catalogName, schemaName)
+  with Logging {
+
+  val catalog: SessionCatalog = sqlContext.sessionState.catalog
+
+  private final val RESULT_SET_SCHEMA = new TableSchema()
+    .addStringColumn("TABLE_SCHEM", "Schema name.")
+    .addStringColumn("TABLE_CATALOG", "Catalog name.")
+
+  private val rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    logInfo(s"Close get schemas with $statementId")
+    setState(OperationState.CLOSED)
+  }
 
   override def runInternal(): Unit = {
+    statementId = UUID.randomUUID().toString
+    logInfo(s"Getting schemas with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -53,14 +74,29 @@ private[hive] class SparkGetSchemasOperation(
 
     try {
       val schemaPattern = convertSchemaPattern(schemaName)
-      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
-        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
+      catalog.listDatabases(schemaPattern).foreach { dbName =>
+        rowSet.addRow(Array[AnyRef](dbName, ""))
       }
       setState(OperationState.FINISHED)
     } catch {
       case e: HiveSQLException =>
-        setState(OperationState.ERROR)
-        throw e
+      setState(OperationState.ERROR)
+      throw e
     }
+  }
+
+  override def getNextRowSet(order: FetchOrientation, maxRows: Long): RowSet = {
+    validateDefaultFetchOrientation(order)
+    assertState(OperationState.FINISHED)
+    setHasResultSet(true)
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      rowSet.setStartOffset(0)
+    }
+    rowSet.extractSubset(maxRows.toInt)
+  }
+
+  override def cancel(): Unit = {
+    logInfo(s"Cancel get schemas with $statementId")
+    setState(OperationState.CANCELED)
   }
 }
