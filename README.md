@@ -22,6 +22,12 @@ Spark is built using [Apache Maven](http://maven.apache.org/).
 To build Spark and its example programs, run:
 
     build/mvn -DskipTests clean package
+    
+## Building Shaded Spark SQL ThriftServer
+
+Build a shaded spark thriftsever jar used for fixing [jdbc metadata bug](https://issues.apache.org/jira/browse/SPARK-9686), run:
+
+    mvn -Phive-thriftserver  -pl sql/shaded-hive-thriftserver,sql/hive-thriftserver clean package -DskipTests
 
 (You do not need to do this if you downloaded a pre-built package.)
 
