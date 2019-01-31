@@ -59,8 +59,10 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkSession.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
 
       HiveConf.metaVars.foreach { key =>
-        sparkContext.hadoopConfiguration
-          .set(key.varname, metadataHive.getConf(key.varname, key.defaultStrVal))
+        val value = metadataHive.getConf(key.varname, key.defaultStrVal)
+        if (value != null) {
+          sparkContext.hadoopConfiguration.set(key.varname, value)
+        }
       }
     }
   }
