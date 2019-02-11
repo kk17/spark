@@ -68,6 +68,13 @@
                     <include>org.apache.spark.sql.hive.thriftserver.*</include>
                   </includes>
                 </relocation>
+                <!--<relocation>-->
+                  <!--<pattern>org.apache.hive.service.cli.session</pattern>-->
+                  <!--<shadedPattern>shaded.org.apache.hive.service.cli.session</shadedPattern>-->
+                  <!--<includes>-->
+                    <!--<include>org.apache.hive.service.cli.session.*</include>-->
+                  <!--</includes>-->
+                <!--</relocation>-->
               </relocations>
             </configuration>
           </execution>
